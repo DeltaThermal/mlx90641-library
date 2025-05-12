@@ -1,130 +1,106 @@
-// /**
-//  * @copyright (C) 2017 Melexis N.V.
-//  *
-//  * Licensed under the Apache License, Version 2.0 (the "License");
-//  * you may not use this file except in compliance with the License.
-//  * You may obtain a copy of the License at
-//  *
-//  *     http://www.apache.org/licenses/LICENSE-2.0
-//  *
-//  * Unless required by applicable law or agreed to in writing, software
-//  * distributed under the License is distributed on an "AS IS" BASIS,
-//  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-//  * See the License for the specific language governing permissions and
-//  * limitations under the License.
-//  *
-//  */
-// #include "mbed.h"
-// #include "MLX90641_I2C_Driver.h"
+// functions/MLX90641_I2C_Driver.cpp
+#include "MLX90641_I2C_Driver.h"
+#include <fcntl.h>
+#include <unistd.h>
+#include <sys/ioctl.h>
+#include <linux/i2c-dev.h>
+#include <linux/i2c.h>
+#include <stdio.h>
 
-// I2C i2c(p9, p10);
+static int i2c_fd = -1;
 
-// void MLX90641_I2CInit()
-// {   
-//     i2c.stop();
-// }
+// Open the I2C bus if not already open
+static void ensure_i2c_open() {
+    if (i2c_fd < 0) {
+        const char *dev = "/dev/i2c-1";
+        if ((i2c_fd = open(dev, O_RDWR)) < 0) {
+            perror("Opening I2C device");
+        }
+    }
+}
 
-// int MLX90641_I2CGeneralReset(void)
-// {    
-//     int ack;
-//     char cmd[2] = {0,0};
-    
-//     cmd[0] = 0x00;
-//     cmd[1] = 0x06;    
+void MLX90641_I2CInit(void) {
+    ensure_i2c_open();
+}
 
-//     i2c.stop();
-//     wait_us(5);    
-//     ack = i2c.write(cmd[0], &cmd[1], 1, 0);
-    
-//     if (ack != 0x00)
-//     {
-//         return -1;
-//     }         
-//     i2c.stop();   
-    
-//     wait_us(50);    
-    
-//     return 0;
-// }
+int MLX90641_I2CGeneralReset(void) {
+    // No-op on Linux
+    return 0;
+}
 
-// int MLX90641_I2CRead(uint8_t slaveAddr, uint16_t startAddress, uint16_t nMemAddressRead, uint16_t *data)
-// {
-//     uint8_t sa;                           
-//     int ack = 0;                               
-//     int cnt = 0;
-//     int i = 0;
-//     char cmd[2] = {0,0};
-//     char i2cData[1664] = {0};
-//     uint16_t *p;
-    
-//     p = data;
-//     sa = (slaveAddr << 1);
-//     cmd[0] = startAddress >> 8;
-//     cmd[1] = startAddress & 0x00FF;
-    
-//     i2c.stop();
-//     wait_us(5);    
-//     ack = i2c.write(sa, cmd, 2, 1);
-    
-//     if (ack != 0x00)
-//     {
-//         return -1;
-//     }
-             
-//     sa = sa | 0x01;
-//     ack = i2c.read(sa, i2cData, 2*nMemAddressRead, 0);
-    
-//     if (ack != 0x00)
-//     {
-//         return -1; 
-//     }          
-//     i2c.stop();   
-    
-//     for(cnt=0; cnt < nMemAddressRead; cnt++)
-//     {
-//         i = cnt << 1;
-//         *p++ = (uint16_t)i2cData[i]*256 + (uint16_t)i2cData[i+1];
-//     }
-    
-//     return 0;   
-// } 
+int MLX90641_I2CRead(uint8_t slaveAddr,
+                     uint16_t startAddress,
+                     uint16_t nMemAddressRead,
+                     uint16_t *data) {
+    ensure_i2c_open();
+    // Read in blocks to avoid exceeding kernel I2C msg size limits
+    const int maxWords = 32;
+    uint16_t addr = startAddress;
+    int remaining = nMemAddressRead;
+    int index = 0;
+    while (remaining > 0) {
+        int blockWords = remaining > maxWords ? maxWords : remaining;
+        int bytes = blockWords * 2;
+        uint8_t buf[64]; // maxWords*2
+        uint8_t reg[2] = { static_cast<uint8_t>(addr >> 8),
+                           static_cast<uint8_t>(addr & 0xFF) };
 
-// void MLX90641_I2CFreqSet(int freq)
-// {
-//     i2c.frequency(1000*freq);
-// }
+        struct i2c_rdwr_ioctl_data packets;
+        struct i2c_msg msgs[2];
 
-// int MLX90641_I2CWrite(uint8_t slaveAddr, uint16_t writeAddress, uint16_t data)
-// {
-//     uint8_t sa;
-//     int ack = 0;
-//     char cmd[4] = {0,0,0,0};
-//     static uint16_t dataCheck;
-    
+        // Write register address
+        msgs[0].addr  = slaveAddr;
+        msgs[0].flags = 0;
+        msgs[0].len   = 2;
+        msgs[0].buf   = reg;
 
-//     sa = (slaveAddr << 1);
-//     cmd[0] = writeAddress >> 8;
-//     cmd[1] = writeAddress & 0x00FF;
-//     cmd[2] = data >> 8;
-//     cmd[3] = data & 0x00FF;
+        // Read data into buf
+        msgs[1].addr  = slaveAddr;
+        msgs[1].flags = I2C_M_RD;
+        msgs[1].len   = bytes;
+        msgs[1].buf   = buf;
 
-//     i2c.stop();
-//     wait_us(5);    
-//     ack = i2c.write(sa, cmd, 4, 0);
-    
-//     if (ack != 0x00)
-//     {
-//         return -1;
-//     }         
-//     i2c.stop();   
-    
-//     MLX90641_I2CRead(slaveAddr,writeAddress,1, &dataCheck);
-    
-//     if ( dataCheck != data)
-//     {
-//         return -2;
-//     }    
-    
-//     return 0;
-// }
+        packets.msgs  = msgs;
+        packets.nmsgs = 2;
 
+        if (ioctl(i2c_fd, I2C_RDWR, &packets) < 0) {
+            perror("I2C_RDWR ioctl");
+            return -1;
+        }
+
+        // Pack into uint16_t array (MSB first)
+        for (int i = 0; i < blockWords; ++i) {
+            data[index + i] = (uint16_t(buf[2*i]) << 8) | uint16_t(buf[2*i + 1]);
+        }
+
+        // advance pointers
+        addr += blockWords;
+        index += blockWords;
+        remaining -= blockWords;
+    }
+    return 0;
+}
+
+void MLX90641_I2CFreqSet(int /*freq*/) {
+    // No-op on Linux
+}
+
+int MLX90641_I2CWrite(uint8_t slaveAddr,
+                      uint16_t writeAddress,
+                      uint16_t value) {
+    ensure_i2c_open();
+    // Compose 4-byte buffer: addr MSB/LSB, value MSB/LSB
+    uint8_t buf[4] = { static_cast<uint8_t>(writeAddress >> 8),
+                       static_cast<uint8_t>(writeAddress & 0xFF),
+                       static_cast<uint8_t>(value >> 8),
+                       static_cast<uint8_t>(value & 0xFF) };
+    if (ioctl(i2c_fd, I2C_SLAVE, slaveAddr) < 0) {
+        perror("I2C: set slave");
+        return -1;
+    }
+    if (write(i2c_fd, buf, 4) != 4) {
+        perror("I2C: Write reg+data");
+        return -1;
+    }
+    return 0;
+}

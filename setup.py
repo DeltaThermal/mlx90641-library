@@ -1,39 +1,28 @@
-from setuptools import setup, Extension
-import os
-import sys
-from setuptools.command.build_ext import build_ext
-
-class get_pybind_include(object):
-    """Helper class to determine the pybind11 include path"""
-    def __str__(self):
-        import pybind11
-        return pybind11.get_include()
+from setuptools import setup
+from pybind11.setup_helpers import Pybind11Extension, build_ext
 
 ext_modules = [
-    Extension(
-        'mlx90641_cpp',
+    Pybind11Extension(
+        name="mlx90641",
         sources=[
-    'mlx90641/bindings.cpp',
-    'functions/MLX90641_API.cpp',
-],
-        include_dirs=[
-            'headers',
-            get_pybind_include()
+            "mlx90641_module.cpp",
+            "functions/MLX90641_API.cpp",
+            "functions/MLX90641_I2C_Driver.cpp",
         ],
-        language='c++',
-        extra_compile_args=['-std=c++11'],
+        include_dirs=["headers"],
+        libraries=["i2c"],       # link against libi2c (SMBus functions)
+        extra_compile_args=["-std=c++11"],
     ),
 ]
 
 setup(
-    name='mlx90641',
-    version='0.1.0',
-    author='Wesley Newman',
-    description='Python bindings for MLX90641 driver (C++ backend)',
-    long_description=open("README.md").read() if os.path.exists("README.md") else "",
+    name="mlx90641",
+    version="0.1.0",
+    author="Your Name",
+    author_email="you@example.com",
+    description="Python bindings for Melexis MLX90641 thermal sensor",
     ext_modules=ext_modules,
-    packages=['mlx90641'],
-    install_requires=['pybind11'],
+    cmdclass={"build_ext": build_ext},
     zip_safe=False,
-    python_requires='>=3.6',
+    install_requires=["pybind11>=2.6.0"],
 )
