@@ -16,7 +16,7 @@ ext_modules = [
 ]
 
 setup(
-    name="mlx90641",
+    name="mlx90641-library",
     version="0.1.0",
     author="Your Name",
     author_email="you@example.com",
